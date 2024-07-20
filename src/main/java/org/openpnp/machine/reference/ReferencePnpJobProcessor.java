@@ -80,6 +80,7 @@ public class ReferencePnpJobProcessor extends AbstractPnpJobProcessor {
         Part, PartHeight,               // keep this values for backward compatibility
         PartBoard, PartHeightPartBoard, // sort as default, but use the board id as final sorting order
         BoardPart,                      // sort by board id first, then part id
+        PickLocation,                   // take the shorted route between all pick locations
         Unsorted;                       // keep the placements unsorted - for hand-optimized jobs
 
         // provide a dedicated toSting() method (with translation) to convert the enum values into
@@ -527,6 +528,10 @@ public class ReferencePnpJobProcessor extends AbstractPnpJobProcessor {
                         .collect(Collectors.toList());
                 break;
                 
+            case PickLocation:
+                jobPlacements = sortByPickLocation(getPendingJobPlacements());
+                break;
+                
             // FIXME: generating a error if not all enum values are handled would be more error resistant
             default:
                 Logger.warn("JobProcessor:Plan(): unhandled jobOrder " + jobOrder);
@@ -557,6 +562,45 @@ public class ReferencePnpJobProcessor extends AbstractPnpJobProcessor {
             Logger.debug("Planned placements {}", plannedPlacements);
             
             return new ChangeNozzleTips(plannedPlacements);
+        }
+
+        /**
+         * Sort jobPlacements using any available feeders pick locations taking the shortest route
+         * between all feeders.
+         * 
+         * @param jobPlacements
+         * @return optimized list of jobPlacements
+         */
+        private List<JobPlacement> sortByPickLocation(List<JobPlacement> jobPlacements) {
+            
+            // route pick locations through travelling salesman
+            TravellingSalesman<JobPlacement> tsm = new TravellingSalesman<>(
+                    jobPlacements, 
+                    new TravellingSalesman.Locator<JobPlacement>() { 
+                        @Override
+                        public Location getLocation(JobPlacement locatable) {
+                            Location location = null;
+
+                            try {
+                                final Feeder feeder = findFeeder(machine, locatable.getPlacement().getPart());
+
+                                location = feeder.getPickLocation();
+                            }
+                            catch (Exception e) {
+                                location = null;
+                            }
+
+                            return location;
+                        }
+                    }, 
+                    null,
+                    null);
+            
+            // Solve it using the default heuristics.
+            tsm.solve();
+            
+            // return optimized placements
+            return tsm.getTravel();
         }
     }
     
@@ -1815,6 +1859,7 @@ public class ReferencePnpJobProcessor extends AbstractPnpJobProcessor {
             if (nozzle.getNozzleTip() == null) {
                 return null;
             }
+            // TODO: collect all placements into a list and sort it for best performance
             for (JobPlacement jobPlacement : jobPlacements) {
                 Placement placement = jobPlacement.getPlacement();
                 Part part = placement.getPart();
@@ -1856,6 +1901,7 @@ public class ReferencePnpJobProcessor extends AbstractPnpJobProcessor {
                         })
                         .collect(Collectors.toList());
                 if (!goodNozzleTips.isEmpty()) {
+                    // TODO: collect all placements into a list and sort it for best performance
                     return new PlannedPlacement(nozzle, goodNozzleTips.get(0), jobPlacement);
                 }
             }
