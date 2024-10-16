@@ -269,10 +269,10 @@ public class ReferencePnpJobProcessor extends AbstractPnpJobProcessor {
             }
 
             // Make sure there is at least one compatible nozzle tip available
-            validatePartNozzleTip(head, placement.getPart());
+            validatePartNozzleTip(head, part);
 
             // Make sure there is at least one compatible and enabled feeder available
-            findFeeder(machine, placement.getPart());
+            findFeeder(machine, part);
         }
         
         private void validatePartNozzleTip(Head head, Part part) throws JobProcessorException {
@@ -630,9 +630,12 @@ public class ReferencePnpJobProcessor extends AbstractPnpJobProcessor {
             // return the wrong angle.
             for (PlannedPlacement p : plannedPlacements) {
                 JobPlacement jobPlacement = p.jobPlacement;
+                Placement placement = jobPlacement.getPlacement();
+                Part part = placement.getPart();
                 Nozzle nozzle = p.nozzle;
-                Feeder feeder = p.feeder;
                 Location pickLocation;
+
+                Feeder feeder = findFeeder(machine, part);
                 
                 try {
                     pickLocation = feeder.getPickLocation();
@@ -641,7 +644,7 @@ public class ReferencePnpJobProcessor extends AbstractPnpJobProcessor {
                     throw new JobProcessorException(feeder, e);
                 }
                 
-                Location placementLocation = Utils2D.calculateBoardPlacementLocation(jobPlacement.getBoardLocation(), jobPlacement.getPlacement().getLocation());
+                Location placementLocation = Utils2D.calculateBoardPlacementLocation(jobPlacement.getBoardLocation(), placement.getLocation());
                 
                 try {
                     nozzle.prepareForPickAndPlaceArticulation(pickLocation, placementLocation);
@@ -1537,8 +1540,7 @@ public class ReferencePnpJobProcessor extends AbstractPnpJobProcessor {
          * This method is used to convert locations, calculated for eg. a nozzle to a head
          * location to return it via getLocation() above.
          */
-        protected Location convertToHeadLocation(HeadMountable hm, Location ref)
-        {
+        protected Location convertToHeadLocation(HeadMountable hm, Location ref) {
             Location location;
         
             if (ref == null) {
